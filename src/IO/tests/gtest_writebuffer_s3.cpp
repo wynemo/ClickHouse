@@ -1220,7 +1220,7 @@ TEST_F(WBS3Test, ReadBeyondLastOffset) {
         auto async_read_counters = std::make_shared<AsyncReadCounters>();
         auto prefetch_log = std::shared_ptr<FilesystemReadPrefetchesLog>();
 
-        auto rb_creator = [this, disk_read_settings] (const std::string & path, size_t read_until_position) -> std::unique_ptr<ReadBufferFromFileBase>
+        auto rb_creator = [this, disk_read_settings] (const std::string & path) -> std::unique_ptr<ReadBufferFromFileBase>
         {
             S3Settings::RequestSettings request_settings;
             return std::make_unique<ReadBufferFromS3>(
@@ -1232,15 +1232,17 @@ TEST_F(WBS3Test, ReadBeyondLastOffset) {
                 disk_read_settings,
                 /* use_external_buffer */true,
                 /* offset */0,
-                read_until_position,
+                /* read_until_position */0,
                 /* restricted_seek */true);
         };
 
         auto rb_remote_fs = std::make_unique<ReadBufferFromRemoteFSGather>(
             std::move(rb_creator),
             objects,
+            "",
             disk_read_settings,
-            cache_log);
+            cache_log,
+            true);
 
         auto rb_async = std::make_unique<AsynchronousBoundedReadBuffer>(
             std::move(rb_remote_fs), *reader, disk_read_settings, async_read_counters, prefetch_log);
