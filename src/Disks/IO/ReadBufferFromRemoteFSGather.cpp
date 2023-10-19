@@ -81,8 +81,6 @@ SeekableReadBufferPtr ReadBufferFromRemoteFSGather::createImplementationBuffer(c
     current_object = object;
     const auto & object_path = object.remote_path;
 
-    auto current_read_buffer_creator = [=, this]() { return read_buffer_creator(object_path); };
-
     std::unique_ptr<ReadBufferFromFileBase> buf;
 
 #ifndef CLICKHOUSE_KEEPER_STANDALONE_BUILD
@@ -93,7 +91,7 @@ SeekableReadBufferPtr ReadBufferFromRemoteFSGather::createImplementationBuffer(c
             object_path,
             cache_key,
             settings.remote_fs_cache,
-            std::move(current_read_buffer_creator),
+            [=, this]() { return read_buffer_creator(/* restricted_seek */true, object_path); },
             settings,
             query_id,
             object.bytes_size,
@@ -104,15 +102,17 @@ SeekableReadBufferPtr ReadBufferFromRemoteFSGather::createImplementationBuffer(c
     }
 #endif
 
-    if (!buf)
-        buf = current_read_buffer_creator();
-
     if (with_page_cache)
     {
+        if (!buf)
+            buf = read_buffer_creator(/* restricted_seek */false, object_path);
         auto cache_key = FileChunkAddress { .path = cache_path_prefix + object_path };
         buf = std::make_unique<CachedInMemoryReadBufferFromFile>(
             cache_key, settings.page_cache, std::move(buf), settings);
     }
+
+    if (!buf)
+        buf = read_buffer_creator(/* restricted_seek */true, object_path);
 
     if (read_until_position > start_offset && read_until_position < start_offset + object.bytes_size)
         buf->setReadUntilPosition(read_until_position - start_offset);
