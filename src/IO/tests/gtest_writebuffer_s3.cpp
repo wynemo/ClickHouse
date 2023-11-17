@@ -1240,8 +1240,7 @@ TEST_F(WBS3Test, ReadBeyondLastOffset) {
             std::move(rb_creator),
             objects,
             disk_read_settings,
-            cache_log,
-            true);
+            cache_log);
 
         auto rb_async = std::make_unique<AsynchronousBoundedReadBuffer>(
             std::move(rb_remote_fs), *reader, disk_read_settings, async_read_counters, prefetch_log);
