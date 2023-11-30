@@ -10,19 +10,18 @@ On another hand, PyGithub is used for convenient getting commit's status from AP
 """
 
 
-from contextlib import contextmanager
-from typing import Any, Iterator, List, Literal, Optional
 import argparse
 import json
 import logging
 import subprocess
+from contextlib import contextmanager
+from typing import Any, Iterator, List, Literal, Optional
 
-from git_helper import commit, release_branch
+from git_helper import Git, commit, release_branch
 from version_helper import (
     FILE_WITH_VERSION_PATH,
     GENERATED_CONTRIBUTORS,
     ClickHouseVersion,
-    Git,
     VersionType,
     get_abs_path,
     get_version_from_repo,
