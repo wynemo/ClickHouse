@@ -1,8 +1,19 @@
 # -*- coding: utf-8 -*-
 from ast import literal_eval
 from dataclasses import dataclass
+import dataclasses
 from pathlib import Path
-from typing import Dict, Final, Iterable, List, Literal, Optional, Tuple
+from typing import (
+    Dict,
+    Final,
+    Iterable,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 from html import escape
 import csv
 import datetime
@@ -12,6 +23,7 @@ import os
 
 from build_download_helper import get_gh_api
 from ci_config import BuildConfig, CI_CONFIG
+from env_helper import TEMP_PATH
 
 
 logger = logging.getLogger(__name__)
@@ -221,6 +233,7 @@ HTML_TEST_PART = """
 """
 
 BASE_HEADERS = ["Test name", "Test status"]
+JOB_REPORT_FILE = Path(TEMP_PATH) / "job_report.json"
 
 
 @dataclass
@@ -229,10 +242,10 @@ class TestResult:
     status: str
     # the following fields are optional
     time: Optional[float] = None
-    log_files: Optional[List[Path]] = None
+    log_files: Optional[Union[Sequence[str], Sequence[Path]]] = None
     raw_logs: Optional[str] = None
     # the field for uploaded logs URLs
-    log_urls: Optional[List[str]] = None
+    log_urls: Optional[Sequence[str]] = None
 
     def set_raw_logs(self, raw_logs: str) -> None:
         self.raw_logs = raw_logs
@@ -245,9 +258,8 @@ class TestResult:
                 f"Malformed input: must be a list literal: {log_files_literal}"
             )
         for log_path in log_paths:
-            file = Path(log_path)
-            assert file.exists(), file
-            self.log_files.append(file)
+            assert Path(log_path).exists(), log_path
+            self.log_files.append(log_path)
 
     @staticmethod
     def create_check_timeout_expired(timeout: float) -> "TestResult":
@@ -255,6 +267,55 @@ class TestResult:
 
 
 TestResults = List[TestResult]
+
+
+@dataclass
+class JobReport:
+    status: str
+    description: str
+    test_results: TestResults
+    start_time: str
+    duration: float
+    additional_files: Union[Sequence[str], Sequence[Path]]
+    # clcikhouse version, build job only
+    version: str = ""
+    # checkname to set in commit status, set if differs from jjob name
+    check_name: str = ""
+    # directory with artifacts to upload on s3
+    build_dir_for_upload: Union[Path, str] = ""
+    # if False no GH commit status will be created by CI
+    need_commit_status: bool = True
+
+    @classmethod
+    def exist(cls) -> bool:
+        return JOB_REPORT_FILE.is_file()
+
+    @classmethod
+    def load(cls):  # type: ignore
+        res = {}
+        with open(JOB_REPORT_FILE, "r") as json_file:
+            res = json.load(json_file)
+            # Deserialize the nested lists of TestResult
+            test_results_data = res.get("test_results", [])
+            test_results = [TestResult(**result) for result in test_results_data]
+            del res["test_results"]
+        return JobReport(test_results=test_results, **res)
+
+    @classmethod
+    def cleanup(cls):
+        if JOB_REPORT_FILE.exists():
+            JOB_REPORT_FILE.unlink()
+
+    def dump(self):
+        def path_converter(obj):
+            if isinstance(obj, Path):
+                return str(obj)
+            raise TypeError("Type not serializable")
+
+        with open(JOB_REPORT_FILE, "w") as json_file:
+            json.dump(
+                dataclasses.asdict(self), json_file, default=path_converter, indent=2
+            )
 
 
 def read_test_results(results_path: Path, with_raw_logs: bool = True) -> TestResults:
@@ -296,7 +357,7 @@ class BuildResult:
     log_url: str
     build_urls: List[str]
     version: str
-    status: StatusType
+    status: str
     elapsed_seconds: int
     job_api_url: str
     _job_name: Optional[str] = None
