@@ -9,6 +9,7 @@
 
 #include "hasLinuxCapability.h"
 #include <base/unaligned.h>
+#include <base/getThreadId.h>
 #include <Common/logger_useful.h>
 
 #include <cerrno>
@@ -205,7 +206,8 @@ bool checkPermissionsImpl()
 
     try
     {
-        TaskStatsInfoGetter();
+	::taskstats stats{};
+        TaskStatsInfoGetter().getStat(stats, static_cast<pid_t>(getThreadId()));
     }
     catch (const Exception & e)
     {
